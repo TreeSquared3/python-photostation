@@ -29,9 +29,12 @@ class PhotoStationService(object):
                 print('parent album {} is missing album {}'.format(parent.path, folder))
                 parent = parent.create(folder)
             else:
-                return None                
+                return None
 
         return parent
+
+    def tag_manager(self):
+        return PhotoStationTagManager()
 
     @staticmethod
     def query(api, params):
@@ -255,3 +258,36 @@ class PhotoStationPhoto(object):
             'ps_username': PhotoStationService.session.username
             })
         self.album.remove_item(self.filename)
+
+class PhotoStationTag(object):
+    def __init__(self, id, name, tag_type):
+        self.id = id
+        self.name = name
+        self.tag_type = tag_type
+
+    @classmethod
+    def from_photostation(cls, pstag):
+        return cls(pstag['id'], pstag['name'], pstag['tag_type'])
+
+    def __str__(self):
+        return '{id:' + self.id + ',name:' + self.name + ',tag_type:' + self.tag_type + '}'
+
+class PhotoStationTagManager:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def tags(self):
+        items = PhotoStationService.session.query('SYNO.PhotoStation.Tag', {
+            'method': 'list',
+            'type': 'desc',
+            'offset': 0,
+            'limit': -1
+            })
+
+        tags = {}
+        for item in items['tags']:
+            tag = PhotoStationTag.from_photostation(item)
+            tags[tag.name] = tag
+
+        return tags
