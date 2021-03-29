@@ -2,11 +2,11 @@
 class PhotoStationUtils(object):
     @staticmethod
     def ascii2hex(str):
-        return ''.join(x.encode('hex') for x in str)
+        return ''.join(format(ord(x), "x") for x in str)
 
     @staticmethod
     def hex2ascii(hex):
-        return bytearray.fromhex(hex).decode('utf-8').encode('utf-8')
+        return bytearray.fromhex(hex).decode('utf-8')
 
     @staticmethod
     def album_id(path):
