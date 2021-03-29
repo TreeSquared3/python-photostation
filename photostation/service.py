@@ -1,5 +1,6 @@
 import requests
 import time
+from datetime import datetime
 import io
 from requests_toolbelt.downloadutils import stream
 from photostation.session import SynologyAuthSession
@@ -96,6 +97,29 @@ class PhotoStationAlbum(object):
 
         return self._items
 
+    def find_items(self, tags, recursive=True):
+
+        items_raw = PhotoStationService.session.query('SYNO.PhotoStation.Album', {
+            'method': 'list',
+            'id': PhotoStationUtils.album_id(self.path),
+            'type': 'album,photo,video',
+            'offset': 0, 
+            'limit': -1,
+            'recursive': recursive,
+            'desc_tag' : ','.join(x.id for x in tags)
+            })
+
+        items = {}
+        for item in items_raw['items']:
+            if item['type'] == 'album':
+                album = PhotoStationAlbum.from_photostation(self, item)
+                items[album.name] = album
+            else:
+                photo = PhotoStationPhoto.from_photostation(self, item)
+                items[photo.filename] = photo
+
+        return items
+
     def create(self, name):
         PhotoStationService.session.query('SYNO.PhotoStation.Album', {
             'name': name,
@@ -139,8 +163,8 @@ class PhotoStationPhoto(object):
     def from_photostation(cls, album, psphoto):
         info = psphoto['info']
 
-        created = int(time.mktime(time.strptime(info['takendate'], '%Y-%m-%d %H:%M:%S'))) * 1000
-        modified = int(time.mktime(time.strptime(info['createdate'], '%Y-%m-%d %H:%M:%S'))) * 1000
+        created = PhotoStationUtils.ymdhms_to_timestamp_utc(info['takendate']) * 1000
+        modified = PhotoStationUtils.ymdhms_to_timestamp_utc(info['createdate']) * 1000
         filesize = int(info['size'])
 
         if info.get('gps') is not None:
@@ -215,6 +239,20 @@ class PhotoStationPhoto(object):
 
         return True
 
+    def tags(self):
+        items = PhotoStationService.session.query('SYNO.PhotoStation.PhotoTag', {
+            'method': 'list',
+            'type': 'desc',
+            'id' : id()
+            })
+
+        tags = {}
+        for item in items['tags']:
+            tag = PhotoStationTag.from_photostation(item)
+            tags[tag.name] = tag
+
+        return tags
+
     def save_content(self, file):
 
         data = io.BytesIO()
@@ -242,6 +280,10 @@ class PhotoStationPhoto(object):
 
         self.album.add_item(self.filename, self)
 
+    @property
+    def id(self):
+        return PhotoStationUtils.photo_id(self.filetype, self.album.path, self.filename)
+
     def update(self, changes):
         data = {
             'id': PhotoStationUtils.photo_id(self.filetype, self.album.path, self.filename),
@@ -250,7 +292,7 @@ class PhotoStationPhoto(object):
             }
         data.update(changes)
         PhotoStationService.session.query('SYNO.PhotoStation.Photo', data)
-        
+
     def delete(self):
         PhotoStationService.session.query('SYNO.PhotoStation.Photo', {
             'id': PhotoStationUtils.photo_id(self.filetype, self.album.path, self.filename),
@@ -259,6 +301,7 @@ class PhotoStationPhoto(object):
             })
         self.album.remove_item(self.filename)
 
+# currently only desc tags
 class PhotoStationTag(object):
     def __init__(self, id, name, tag_type):
         self.id = id
@@ -272,6 +315,7 @@ class PhotoStationTag(object):
     def __str__(self):
         return '{id:' + self.id + ',name:' + self.name + ',tag_type:' + self.tag_type + '}'
 
+# currently only supports desc tags
 class PhotoStationTagManager:
     def __init__(self):
         pass
@@ -291,3 +335,55 @@ class PhotoStationTagManager:
             tags[tag.name] = tag
 
         return tags
+
+    @classmethod
+    def create(self, name):
+        r = PhotoStationService.session.query('SYNO.PhotoStation.Tag', {
+            'method': 'create',
+            'name' : name,
+            'type': 'desc'
+            })
+
+        if not 'id' in r:
+            return None
+
+        return PhotoStationTag(r['id'], name, 'desc')
+
+    @classmethod
+    def add(self, photo, tag):
+        try:
+            items = PhotoStationService.session.query('SYNO.PhotoStation.PhotoTag', {
+                'method': 'desc_tag',
+                'id' : photo.id,
+                'tag_id' : tag.id
+                })
+        except SynologyException as e:
+            if e.value is SynologyException.API_ERROR[468]:
+                return list()
+            raise
+
+        ids = list()
+        for item in items['item_tag_ids']:
+            ids.append(item)
+
+        return ids
+
+    @classmethod
+    def delete(self, id):
+        PhotoStationService.session.query('SYNO.PhotoStation.Tag', {
+            'method': 'delete',
+            'id' : id
+            })
+
+    @classmethod
+    def find_photos(self, tag):
+        r = PhotoStationService.session.query('SYNO.PhotoStation.Tag', {
+            'method': 'create',
+            'name' : name,
+            'type': 'desc'
+            })
+
+        if not 'id' in r:
+            return None
+
+        return PhotoStationTag(r['id'], name, 'desc')

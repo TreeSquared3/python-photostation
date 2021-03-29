@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 
 class PhotoStationUtils(object):
     @staticmethod
@@ -7,6 +8,13 @@ class PhotoStationUtils(object):
     @staticmethod
     def hex2ascii(hex):
         return bytearray.fromhex(hex).decode('utf-8')
+
+
+    @staticmethod
+    def ymdhms_to_timestamp_utc(value: str) -> int:
+        naive_dt = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        utc_dt = naive_dt.replace(tzinfo=timezone.utc)
+        return int(utc_dt.timestamp())
 
     @staticmethod
     def album_id(path):
